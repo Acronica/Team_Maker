@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+    <meta charset="UTF-8">
+    <title>인원 목록</title>
+    <link rel="stylesheet" href="roster.css">
+</head>
+
+<body>
+    <div class="title-bar">
+        <div class="title">인원 목록</div>
+        <div class="window-controls">
+            <button id="minimize-btn" class="window-control-btn">-</button>
+            <button id="maximize-btn" class="window-control-btn">□</button>
+            <button id="close-btn" class="window-control-btn">×</button>
+        </div>
+    </div>
+    <div class="container">
+        <header class="header">
+            <div class="control-container">
+                <button id="fetch-users-btn">불러오기</button>
+                <button id="move-teams-btn">팀 이동</button>
+            </div>
+        </header>
+        <main id="roster-list" class="roster-list"></main>
+    </div>
+    <script src="roster.js"></script>
+</body>
+
+</html>

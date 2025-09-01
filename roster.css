@@ -1,0 +1,143 @@
+:root {
+    --bg-color: #010a13;
+    --text-color: #f0e6d2;
+    --border-color: #785a28;
+    --accent-color: #c89b3c;
+    --slot-bg-color: #111;
+}
+
+body {
+    background-color: var(--bg-color);
+    color: var(--text-color);
+    font-family: 'NanumSquare', sans-serif;
+    margin: 0;
+    box-sizing: border-box;
+    height: 100vh;
+    overflow: hidden;
+    padding: 55px 15px 15px 15px;
+    /* 제목 표시줄 공간 확보 */
+}
+
+.title-bar {
+    height: 40px;
+    background-color: #010a13;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0 10px;
+    color: #a09b8c;
+    -webkit-app-region: drag;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 110;
+}
+
+.title {
+    font-weight: bold;
+}
+
+.window-controls {
+    display: flex;
+    -webkit-app-region: no-drag;
+}
+
+.window-control-btn {
+    width: 40px;
+    height: 40px;
+    border: none;
+    background-color: transparent;
+    color: #a09b8c;
+    font-size: 19px;
+    padding: 0;
+    margin: 0;
+    transition: background-color: 0.2s;
+    cursor: pointer;
+}
+
+.window-control-btn:hover {
+    background-color: rgba(200, 185, 152, 0.2);
+    color: #f0e6d2;
+}
+
+#close-btn:hover {
+    background-color: #e81123;
+    color: white;
+}
+
+.container {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+
+.header {
+    margin-bottom: 15px;
+}
+
+.control-container {
+    display: grid;
+    grid-template-columns: 2fr 1fr 1fr;
+    /* 입력창을 더 넓게 */
+    gap: 10px;
+}
+
+#text-channel-id-input {
+    background-color: #010a13;
+    border: 1px solid var(--border-color);
+    color: var(--text-color);
+    padding: 8px 12px;
+    border-radius: 4px;
+    font-size: 14px;
+    box-sizing: border-box;
+    height: 40px;
+}
+
+.control-container button {
+    background-color: var(--accent-color);
+    border: 1px solid var(--border-color);
+    color: var(--bg-color);
+    font-weight: bold;
+    padding: 8px 12px;
+    font-size: 14px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s;
+    height: 40px;
+    box-sizing: border-box;
+}
+
+.control-container button:hover {
+    background-color: #f0e6d2;
+}
+
+.control-container button:disabled {
+    background-color: #1e282d;
+    color: #5c5c5c;
+    cursor: not-allowed;
+}
+
+.roster-list {
+    flex-grow: 1;
+    background-color: rgba(0, 0, 0, 0.2);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    padding: 10px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.roster-slot {
+    background-color: var(--slot-bg-color);
+    border: 1px solid #46371c;
+    color: var(--text-color);
+    padding: 12px;
+    text-align: center;
+    border-radius: 3px;
+    font-size: 16px;
+    min-height: 20px;
+    user-select: none;
+}
