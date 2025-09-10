@@ -46,7 +46,7 @@
 git clone https://github.com/Acronica/Team_Maker.git
 
 # 2. 프로젝트 폴더로 이동
-cd team-maker-js
+cd Team_maker
 
 # 3. 의존성 패키지 설치 (Windows에서 네이티브 모듈 문제 방지)
 npm install --no-optional
