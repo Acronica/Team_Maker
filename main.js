@@ -6,6 +6,7 @@ const axios = require('axios');
 const log = require('electron-log');
 const { autoUpdater } = require('electron-updater');
 const LCUConnector = require('lcu-connector');
+// .env 파일을 로드하기 위한 구문. 반드시 최상단에 위치해야 합니다.
 require('dotenv').config();
 
 autoUpdater.logger = log;
@@ -15,7 +16,7 @@ log.info('App starting...');
 // --- API 및 전역 변수 설정 ---
 const API_BASE_URL = 'http://34.47.92.228:3000/api';
 const API_KEY = '3810';
-const RIOT_API_KEY = process.env.RIOT_API_KEY;
+const RIOT_API_KEY = process.env.RIOT_API_KEY; // .env 파일에서 키를 불러옵니다.
 let mainWindow;
 
 // --- LCU 관련 전역 변수 ---
@@ -79,14 +80,14 @@ connector.on('connect', (data) => {
         },
         httpsAgent: lcuAgent
     });
-    sendToRenderer('lcu-connected');
+    sendToRenderer('lcu-connection-changed', true);
 });
 
 connector.on('disconnect', () => {
     log.info('League Client disconnected. Clearing API info.');
     isLcuConnected = false;
     lcuApi = null;
-    sendToRenderer('lcu-disconnected');
+    sendToRenderer('lcu-connection-changed', false);
 });
 
 // =================================================================
@@ -134,8 +135,10 @@ ipcMain.handle('save-user-data', async (event, data) => {
 });
 
 ipcMain.handle('verify-summoner', async (event, riotId) => {
-    if (!RIOT_API_KEY || RIOT_API_KEY.startsWith('RGAPI-')) {
-        return { success: false, error: 'Riot API 키가 설정되지 않았습니다.' };
+    // [수정됨] .env 파일에서 불러온 API 키가 비어있는지 더 확실하게 확인합니다.
+    if (!RIOT_API_KEY || RIOT_API_KEY.trim() === '') {
+        log.error('Riot API key is not configured in .env file.');
+        return { success: false, error: 'Riot API 키가 설정되지 않았습니다. (.env 파일 확인)' };
     }
     const parts = riotId.split('#');
     if (parts.length !== 2 || !parts[0] || !parts[1]) {

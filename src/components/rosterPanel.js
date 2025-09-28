@@ -1,165 +1,131 @@
-import { showNotification, setSlotText } from '../utils.js';
 import { ipcRenderer } from '../services/ipcService.js';
 import { dragManager } from '../services/dragManager.js';
-import { getCurrentServer } from '../services/settingsService.js';
-
-let allRosterSlots = [];
-const rosterList = document.getElementById('roster-list');
-const panel = document.getElementById('roster-panel');
+import { updateSlotContent } from '../utils.js';
 
 /**
- * 로스터 슬롯을 생성하는 헬퍼 함수
- * @param {string} name - 슬롯에 표시될 이름
- * @returns {HTMLElement} - 생성된 슬롯 요소
+ * 왼쪽 인원 목록 패널의 동작을 초기화합니다.
  */
-function createRosterSlot(name = '') {
-    const slot = document.createElement('div');
-    slot.className = 'roster-slot';
-    setSlotText(slot, name);
-    slot.setAttribute('draggable', true);
-
-    slot.addEventListener('dragstart', (e) => {
-        if (!slot.textContent) {
-            e.preventDefault();
-            return;
-        }
-        dragManager.start(e, slot.textContent, 'roster');
-    });
-
-    slot.addEventListener('dragend', () => dragManager.end());
-    
-    return slot;
-}
-
-/**
- * 사용자 목록을 기반으로 로스터 목록 UI를 업데이트합니다.
- * @param {Array<Object>} users - 사용자 정보 배열
- */
-function updateRosterList(users = []) {
-    rosterList.innerHTML = '';
-    allRosterSlots = [];
-    const namesInGrid = Array.from(document.querySelectorAll('.player-slot'))
-                             .map(s => s.textContent)
-                             .filter(Boolean);
-    const filteredUsers = users.filter(user => user && user.name && !namesInGrid.includes(user.name));
-    
-    const totalSlots = Math.max(20, filteredUsers.length);
-
-    for (let i = 0; i < totalSlots; i++) {
-        const name = filteredUsers[i] ? filteredUsers[i].name : '';
-        const slot = createRosterSlot(name);
-        rosterList.appendChild(slot);
-        allRosterSlots.push(slot);
-    }
-}
-
-/**
- * 인원 목록 패널의 버튼과 이벤트 리스너를 설정합니다.
- */
-function setupPanelButtons() {
+export function initRosterPanel() {
+    const panel = document.getElementById('roster-panel');
+    const rosterList = document.getElementById('roster-list');
     const fetchButton = document.getElementById('fetch-users-btn');
     const returnAllBtn = document.getElementById('return-all-to-roster-btn');
-    const closeBtn = document.getElementById('roster-close-btn');
+    const rosterCloseBtn = document.getElementById('roster-close-btn');
+    
+    let rosterSlots = [];
 
-    // 닫기 버튼
-    closeBtn?.addEventListener('click', () => {
-        panel.classList.remove('open');
-        const sidePanel = document.getElementById('side-panel');
-        const menuBtn = document.getElementById('menu-btn');
-        if (!sidePanel.classList.contains('open')) {
-            menuBtn.classList.remove('hidden');
-        }
-    });
+    const createRosterSlot = (name = '') => {
+        const slot = document.createElement('div');
+        slot.className = 'roster-slot';
+        slot.textContent = name;
+        slot.setAttribute('draggable', true);
 
-    // 유저 불러오기 버튼
-    fetchButton?.addEventListener('click', () => {
-        const currentServer = getCurrentServer();
-        if (!currentServer?.lobby?.id) {
-            showNotification('봇 설정을 통해 서버를 먼저 선택해주세요.', 'error');
-            return;
-        }
-        ipcRenderer.send('fetch-discord-users', currentServer.lobby.id);
-        fetchButton.textContent = '불러오는 중...';
-        fetchButton.disabled = true;
-    });
-
-    // 모두 목록으로 버튼
-    returnAllBtn?.addEventListener('click', () => {
-        const playersToMove = [];
-        document.querySelectorAll('.player-slot').forEach(slot => {
-            if (slot.textContent) {
-                playersToMove.push(slot.textContent);
-                setSlotText(slot, ''); // 그리드 슬롯 비우기
+        slot.addEventListener('dragstart', (e) => {
+            if (!e.target.textContent) {
+                e.preventDefault();
+                return;
             }
+            dragManager.start(e, e.target.textContent, 'roster');
         });
 
-        if (playersToMove.length > 0) {
-            playersToMove.forEach(name => {
-                const addToRosterEvent = new CustomEvent('addToRoster', { detail: { name } });
-                document.dispatchEvent(addToRosterEvent);
-            });
-            showNotification(`${playersToMove.length}명의 인원이 목록으로 이동했습니다.`);
-        } else {
-            showNotification('팀 슬롯에 인원이 없습니다.', 'error');
+        slot.addEventListener('dragend', () => dragManager.end());
+
+        return slot;
+    };
+
+    const updateRosterList = (users = []) => {
+        rosterList.innerHTML = '';
+        rosterSlots = [];
+        
+        const mainGridSlots = Array.from(document.querySelectorAll('.player-slot'));
+        const namesInGrid = mainGridSlots.map(s => s.querySelector('.slot-front').textContent).filter(Boolean);
+        
+        const filteredUsers = users.filter(user => user && user.name && !namesInGrid.includes(user.name));
+        const totalSlots = Math.max(20, filteredUsers.length);
+
+        for (let i = 0; i < totalSlots; i++) {
+            const name = filteredUsers[i] ? filteredUsers[i].name : '';
+            const slot = createRosterSlot(name);
+            rosterList.appendChild(slot);
+            rosterSlots.push(slot);
         }
+    };
+
+    updateRosterList();
+
+    fetchButton?.addEventListener('click', () => {
+        ipcRenderer.send('fetch-discord-users');
     });
 
-    // IPC 응답 리스너
     ipcRenderer.on('users-fetched-success', (users) => {
         updateRosterList(users);
-        if(fetchButton) {
-            fetchButton.textContent = '불러오기';
-            fetchButton.disabled = false;
-        }
     });
-    ipcRenderer.on('users-fetched-error', (error) => {
-        showNotification(`유저 목록 로딩 실패: ${error}`, 'error');
-        if(fetchButton) {
-            fetchButton.textContent = '불러오기';
-            fetchButton.disabled = false;
-        }
-    });
-}
 
-/**
- * Bug Fix: 그리드에서 로스터로 드롭하는 기능을 설정합니다.
- */
-function setupRosterDropTarget() {
+    // [수정됨] 닫기 버튼 클릭 시 메뉴 버튼 표시 로직 추가
+    rosterCloseBtn?.addEventListener('click', () => {
+        panel.classList.remove('open');
+        
+        const sidePanel = document.getElementById('side-panel');
+        const menuBtn = document.getElementById('menu-btn');
+
+        // 오른쪽 메뉴 패널도 닫혀있을 경우에만 메뉴 버튼을 다시 표시합니다.
+        if (!sidePanel.classList.contains('open')) {
+            setTimeout(() => {
+                menuBtn.classList.remove('hidden');
+            }, 300); // 패널 닫기 애니메이션과 시간을 맞춤
+        }
+    });
+
+    returnAllBtn?.addEventListener('click', () => {
+        const mainGridSlots = Array.from(document.querySelectorAll('.player-slot'));
+        mainGridSlots.forEach(slot => {
+            if (slot.classList.contains('locked')) return;
+            
+            const name = slot.querySelector('.slot-front').textContent;
+            if (name) {
+                const emptyRosterSlot = rosterSlots.find(rs => !rs.textContent);
+                if (emptyRosterSlot) {
+                    emptyRosterSlot.textContent = name;
+                } else {
+                    const newSlot = createRosterSlot(name);
+                    rosterList.appendChild(newSlot);
+                    rosterSlots.push(newSlot);
+                }
+                updateSlotContent(slot, '');
+            }
+        });
+    });
+
     rosterList.addEventListener('dragover', (e) => e.preventDefault());
 
     rosterList.addEventListener('drop', (e) => {
         e.preventDefault();
-        if (dragManager.draggedItem?.origin === 'grid') {
-            const from = dragManager.draggedItem;
+        const from = dragManager.draggedItem;
+        if (from && from.origin === 'grid') {
+            const target = e.target;
             
-            const addToRosterEvent = new CustomEvent('addToRoster', { detail: { name: from.name } });
-            document.dispatchEvent(addToRosterEvent);
-            
-            setSlotText(from.element, '');
+            let emptySlot = rosterSlots.find(rs => !rs.textContent);
+            if(target.classList.contains('roster-slot') && !target.textContent) {
+                emptySlot = target;
+            }
+
+            if (emptySlot) {
+                emptySlot.textContent = from.name;
+                updateSlotContent(from.element, '');
+            }
         }
     });
-}
-
-
-/**
- * 인원 목록 패널 컴포넌트를 초기화하는 메인 함수
- */
-export function initRosterPanel() {
-    updateRosterList();
-    setupPanelButtons();
-    setupRosterDropTarget();
 
     document.addEventListener('addToRoster', (e) => {
         const { name } = e.detail;
         if (!name) return;
-        
-        const emptySlot = allRosterSlots.find(slot => !slot.textContent);
+        const emptySlot = rosterSlots.find(slot => !slot.textContent);
         if (emptySlot) {
-            setSlotText(emptySlot, name);
+            emptySlot.textContent = name;
         } else {
             const newSlot = createRosterSlot(name);
             rosterList.appendChild(newSlot);
-            allRosterSlots.push(newSlot);
+            rosterSlots.push(newSlot);
         }
     });
 }

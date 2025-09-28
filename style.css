@@ -93,10 +93,6 @@ body {
     transition: padding-top 0.3s;
 }
 
-.main-content.update-visible {
-    padding-top: 80px;
-}
-
 .container {
     width: 100%;
     max-width: 1100px; 
@@ -106,7 +102,7 @@ body {
     gap: 20px;
     background-color: rgba(1, 10, 19, 0.85);
     border: 2px solid var(--border-color);
-    padding: 90px 20px;
+    padding: 100px 50px;
     border-radius: 5px;
     box-shadow: 0 0 15px rgba(120, 90, 40, 0.5);
     position: relative;
@@ -126,7 +122,7 @@ body {
     width: 100%;
     max-width: 750px;
     margin: 0 auto;
-    grid-template-columns: 1.5fr 1fr 1fr 1fr;
+    grid-template-columns: 2.5fr 1fr 1fr 1fr;
 }
 
 #name-input {
@@ -179,52 +175,6 @@ button:disabled {
 }
 #add-button, #reset-button { width: 120px; }
 
-.btn-small {
-    /* font-size: 16px; <- This line is removed */
-    padding: 0 10px;
-}
-
-.shuffle-button-group {
-    position: relative;
-    display: flex;
-}
-#shuffle-main-btn {
-    flex-grow: 1;
-    border-top-right-radius: 0;
-    border-bottom-right-radius: 0;
-    border-right: 1px solid var(--border-color);
-}
-#shuffle-dropdown-toggle-btn {
-    width: 40px;
-    padding: 0;
-    border-top-left-radius: 0;
-    border-bottom-left-radius: 0;
-    font-size: 14px;
-}
-.dropdown-content {
-    display: none;
-    position: absolute;
-    top: 100%;
-    left: 0;
-    background-color: var(--bg-color);
-    min-width: 100%;
-    box-shadow: 0px 8px 16px 0px rgba(0,0,0,0.2);
-    z-index: 1;
-    border: 1px solid var(--border-color);
-    border-radius: 3px;
-}
-.dropdown-content.show { display: block; }
-.dropdown-content button {
-    width: 100%;
-    text-align: left;
-    height: 45px;
-    font-size: 16px;
-    border: none;
-    border-bottom: 1px solid #46371c;
-    border-radius: 0;
-}
-.dropdown-content button:last-child { border-bottom: none; }
-
 .grid-section {
     display: grid;
     grid-template-columns: 120px 1fr 60px 1fr;
@@ -234,6 +184,7 @@ button:disabled {
     width: 100%;
     max-width: 750px;
     margin: 0 auto;
+    perspective: 1000px;
 }
 .grid-header {
     display: flex;
@@ -250,7 +201,17 @@ button:disabled {
     font-size: 25px;
     color: #f0e6d2;
     text-shadow: 0 0 5px var(--accent-color);
+    transition: all 0.3s;
 }
+.team-title.blue-side {
+    border-color: #457b9d;
+    box-shadow: 0 0 10px #457b9d, inset 0 0 5px rgba(69, 123, 157, 0.5);
+}
+.team-title.red-side {
+    border-color: #c4443e;
+    box-shadow: 0 0 10px #c4443e, inset 0 0 5px rgba(196, 68, 62, 0.5);
+}
+
 .position-label {
     width: 120px; height: 45px; display: flex;
     justify-content: center; align-items: center; font-weight: bold;
@@ -260,27 +221,55 @@ button:disabled {
 }
 .player-slot {
     width: 100%; min-width: 100px; height: 45px;
-    border: 2px solid #46371c; background-color: rgba(0, 0, 0, 0.3);
-    border-radius: 3px; display: flex; justify-content: center;
-    align-items: center; color: var(--text-color-primary); font-size: 21px;
-    transition: all 0.3s; cursor: grab; user-select: none;
-    white-space: nowrap;
+    border: 2px solid #46371c; background-color: transparent;
+    border-radius: 3px; user-select: none;
+    box-sizing: border-box;
+    cursor: grab;
+    position: relative;
+    transform-style: preserve-3d;
+}
+.slot-inner {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    transform-style: preserve-3d;
+    transition: transform 0.6s cubic-bezier(0.4, 0.0, 0.2, 1);
+}
+.slot-inner.is-flipped {
+    transform: rotateY(180deg);
+}
+.player-slot.pop-in { 
+    animation: pop-in 0.3s ease-out forwards; 
+}
+
+.slot-front, .slot-back {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    -webkit-backface-visibility: hidden;
+    backface-visibility: hidden;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    color: var(--text-color-primary);
+    font-size: 21px;
+    background-color: rgba(0, 0, 0, 0.3);
+    border-radius: 1px;
     overflow: hidden;
     text-overflow: ellipsis;
-    box-sizing: border-box; 
+    white-space: nowrap;
     padding: 0 5px;
+    box-sizing: border-box;
 }
-.player-slot.text-overflow {
-    justify-content: flex-start;
-    padding: 0 10px;
+.slot-back {
+    transform: rotateY(180deg);
 }
 
 .player-slot.locked { border-color: var(--accent-color); box-shadow: 0 0 8px var(--accent-color); cursor: not-allowed; }
 .player-slot.dragging, .roster-slot.dragging { opacity: 0.5; }
-.swap-button { width: 40px; height: 40px; font-size: 24px; padding: 0; border-color: #46371c; }
+
 .team-swap-header-btn { width: 100%; height: 40px; font-size: 24px; padding: 0; border-color: #46371c; }
 .highlight { border-color: #f0e6d2 !important; box-shadow: 0 0 15px 3px #f0e6d2, inset 0 0 10px rgba(240, 230, 210, 0.3); }
-.player-slot.highlight, .swap-button.highlight { background-color: rgba(200, 155, 60, 0.25); color: #fff; }
 .position-label.highlight { color: var(--bg-color); text-shadow: 0 0 5px #f0e6d2; }
 
 .menu-toggle-btn {
@@ -342,7 +331,6 @@ button:disabled {
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     box-sizing: border-box; padding: 0 5px;
 }
-.roster-slot.text-overflow { justify-content: flex-start; padding: 0 10px; }
 .roster-slot:hover { background-color: #2a2a2a; border-color: var(--accent-color); }
 
 .panel-close-btn {
@@ -370,7 +358,9 @@ button:disabled {
 .modal-header h2 { margin: 0; font-size: 22px; }
 .modal-close-btn {
     background: none; border: none; color: var(--text-color-primary);
-    font-size: 28px; cursor: pointer; height: auto; padding: 0; width: auto;
+    font-size: 28px; cursor: pointer; height: auto;
+    padding: 10px;
+    width: auto;
 }
 .modal-body { padding: 20px; flex-grow: 1; display: flex; gap: 20px; overflow: hidden; }
 
@@ -525,18 +515,95 @@ button:disabled {
     0% { box-shadow: 0 0 0 0 rgba(200, 155, 60, 0.7); border-color: #c89b3c; }
     100% { box-shadow: 0 0 15px 5px rgba(200, 155, 60, 0); border-color: #46371c; }
 }
-.player-slot.pop-in { animation: pop-in 0.3s ease-out forwards; }
+
 @keyframes pop-in {
-    0% { opacity: 0; transform: scale(0.5); }
-    80% { opacity: 1; transform: scale(1.1); }
-    100% { opacity: 1; transform: scale(1); }
+    0% { transform: scale(0.5); opacity: 0; }
+    80% { transform: scale(1.1); opacity: 1; }
+    100% { transform: scale(1); opacity: 1; }
 }
-.ripple {
-    position: absolute; border-radius: 50%;
-    background-color: rgba(200, 155, 60, 0.7);
-    transform: scale(0); animation: ripple 0.6s linear;
+
+.shuffle-button-group {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 2px;
+    position: relative;
 }
-@keyframes ripple {
-    to { transform: scale(4); opacity: 0; }
+#shuffle-main-btn {
+    border-top-right-radius: 0;
+    border-bottom-right-radius: 0;
+}
+#shuffle-dropdown-toggle-btn {
+    width: 40px;
+    padding: 0;
+    border-left: none;
+    border-top-left-radius: 0;
+    border-bottom-left-radius: 0;
+}
+#shuffle-dropdown-content {
+    display: none;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    width: 100%;
+    z-index: 10;
+    background-color: var(--bg-color);
+    border: 2px solid var(--border-color);
+    border-top: none;
+    border-radius: 0 0 3px 3px;
+    box-shadow: 0 8px 16px rgba(0,0,0,0.5);
+}
+#shuffle-dropdown-content.show { display: block; }
+#shuffle-dropdown-content button {
+    width: 100%;
+    height: 50px;
+    border: none;
+    border-radius: 0;
+    border-top: 1px solid #46371c;
+}
+#shuffle-dropdown-content button:first-child { border-top: none; }
+.btn-small {
+    padding: 0 10px;
+}
+.btn-small.invite {
+    width: 100px;
+}
+
+
+.coin-flip-btn {
+    background: none;
+    border: none;
+    color: var(--text-color-secondary);
+    font-size: 24px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.2s;
+    width: 60px;
+    height: 45px;
+    padding: 0;
+    transform-style: preserve-3d;
+}
+.coin-flip-btn:hover {
+    color: var(--accent-color);
+    text-shadow: 0 0 8px var(--accent-color);
+    background: none;
+    box-shadow: none;
+}
+.coin-flip-btn.flipping {
+    animation: flip 1s ease-in-out forwards;
+}
+
+.team-title.updated {
+    animation: team-title-update 0.5s ease-out;
+}
+
+@keyframes flip {
+    from { transform: rotateY(0deg); }
+    to { transform: rotateY(360deg); }
+}
+
+@keyframes team-title-update {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.1); text-shadow: 0 0 15px #f0e6d2; }
+    100% { transform: scale(1); }
 }
 
