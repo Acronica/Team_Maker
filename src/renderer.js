@@ -9,6 +9,10 @@ import { initLadderModal } from './components/modals/ladderModal.js';
 import { initRouletteModal } from './components/modals/rouletteModal.js';
 import { initPatchNotesModal } from './components/modals/patchNotesModal.js';
 
+// Feature flags
+import { FEATURES } from './config.js';
+import { applyFeatureToggles } from './services/featureToggles.js';
+
 // Services
 import { ipcRenderer } from './services/ipcService.js';
 import { loadInitialData } from './services/settingsService.js';
@@ -28,6 +32,9 @@ window.addEventListener('DOMContentLoaded', async () => {
 
     console.log("🚀 Initializing application modules...");
 
+    // 0. 꺼져 있는 연동 기능의 UI 숨기기
+    safelyInitialize('Feature Toggles', applyFeatureToggles);
+
     // 1. 기본 UI 컴포넌트 초기화
     safelyInitialize('Title Bar', initTitleBar);
     safelyInitialize('Side Panel', initSidePanel);
@@ -45,8 +52,12 @@ window.addEventListener('DOMContentLoaded', async () => {
     try {
         await loadInitialData();
         console.log('✅ Initial data loaded.');
-        initializeLcuApi();
-        console.log('✅ LCU API service started.');
+        if (FEATURES.lcu) {
+            initializeLcuApi();
+            console.log('✅ LCU API service started.');
+        } else {
+            console.log('⏸️ LCU 연동이 꺼져 있어 건너뜁니다.');
+        }
     } catch (error) {
         console.error('❌ Failed to load initial data or start LCU service:', error);
     }

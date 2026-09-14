@@ -1,3 +1,6 @@
+// main 프로세스에서 preload 를 통해 전달된 기능 스위치입니다. (features.js 참고)
+export const FEATURES = window.FEATURES || { discord: false, lcu: false, riotApi: false };
+
 export const POSITIONS = ["탑", "정글", "미드", "원딜", "서폿"];
 
 export const POSITION_COLORS = {

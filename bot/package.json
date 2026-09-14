@@ -1,0 +1,18 @@
+{
+  "name": "team-maker-bot",
+  "version": "1.4.5",
+  "description": "Discord bot + API server for Team Maker.",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "deploy": "node deploy-commands.js"
+  },
+  "author": "Aznoca",
+  "license": "ISC",
+  "dependencies": {
+    "cors": "^2.8.5",
+    "discord.js": "^14.16.3",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.2"
+  }
+}

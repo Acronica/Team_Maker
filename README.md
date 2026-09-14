@@ -31,9 +31,15 @@
 
 ## 🚀 설치 및 사용법
 
-1.  **[GitHub Releases 페이지](https://github.com/Acronica/Team_Maker/releases)** 로 이동합니다.
-2.  최신 버전의 `TeamMaker-Setup-x.x.x.exe` 파일을 다운로드하여 설치합니다.
-3.  프로그램을 실행하고 팀 구성을 시작합니다!
+**[GitHub Releases 페이지](https://github.com/Acronica/Team_Maker/releases)** 에서 두 가지 형태 중 하나를 받으세요.
+
+| 파일 | 설명 |
+| --- | --- |
+| `TeamMaker-x.x.x-portable.exe` | **설치 불필요.** 파일 하나를 더블클릭하면 바로 실행됩니다. USB에 넣어 다녀도 됩니다. |
+| `TeamMaker-Setup-x.x.x.exe` | 설치 프로그램. 바탕화면 · 시작 메뉴에 바로가기를 만들고 자동 업데이트를 지원합니다. |
+
+간단히 쓰려면 **portable** 을, 계속 쓸 거라면 **Setup** 을 권합니다.
+자동 업데이트는 설치본에서만 동작합니다.
 
 ---
 
@@ -41,28 +47,88 @@
 
 ### 프로젝트 실행
 
+**Node.js 18 이상**이 필요합니다. ([nodejs.org](https://nodejs.org) 또는 `winget install OpenJS.NodeJS.LTS`)
+
 ```bash
-# 1. 저장소 복제
 git clone https://github.com/Acronica/Team_Maker.git
-
-# 2. 프로젝트 폴더로 이동
-cd Team_maker
-
-# 3. 의존성 패키지 설치 (Windows에서 네이티브 모듈 문제 방지)
+cd Team_Maker
 npm install --no-optional
+npm start
+```
 
-# 4. 개발 모드로 실행
+별도 설정 없이 바로 실행됩니다. 디스코드 봇과 롤 클라이언트 연동은 기본적으로 꺼져 있고,
+팀 구성 · 랜덤 · 사다리 타기 · 돌림판 · 클립보드 복사 등은 그대로 동작합니다.
+연동이 필요해지면 아래 **환경 변수** 항목을 참고해 `.env` 를 만드세요.
+
+> `--no-optional` 은 Windows에서 네이티브 모듈 빌드 문제를 피하기 위한 것입니다.
+
+### 환경 변수
+
+**`.env` 파일은 없어도 됩니다.** 연동 기능을 켤 때만 필요하며,
+`.env.example` 을 `.env` 로 복사한 뒤 값을 채우면 됩니다. (`.env` 는 git에 커밋되지 않습니다.)
+
+| 변수 | 기본값 | 설명 |
+| --- | --- | --- |
+| `ENABLE_DISCORD` | `false` | 디스코드 봇 연동 (인원 불러오기 / 팀 입력 / 채널 설정) |
+| `ENABLE_LCU` | `false` | 롤 클라이언트 연동 (연결 상태 표시 / 파티 초대) |
+| `API_BASE_URL` | – | 디스코드 봇 API 서버 주소 (`ENABLE_DISCORD=true` 일 때만 사용) |
+| `API_KEY` | – | 봇 API 인증 키 (봇 서버와 동일한 값) |
+| `RIOT_API_KEY` | – | Riot 개발자 API 키. 값이 있으면 소환사명 검증이 자동으로 켜집니다. 앱 설정 파일(`settings.json`)에 저장된 키도 인식합니다 |
+
+### 연동 없이 사용하기
+
+디스코드 봇 서버나 롤 클라이언트가 없어도 아래 기능은 그대로 동작합니다.
+
+-   팀원 추가 / 드래그 앤 드롭 배치 / 팀 스왑
+-   전체 · 라인별 · 포지션 랜덤 (3D 카드 뒤집기 애니메이션)
+-   VS 코인 플립
+-   인원 목록 패널 (수동 추가 및 슬롯 ↔ 목록 이동)
+-   사다리 타기, 돌림판
+-   클립보드 복사, 플레이어 정보 저장
+
+`ENABLE_DISCORD` / `ENABLE_LCU` 가 `false` 면 해당 버튼(불러오기, 팀 입력, 채널 설정, 초대,
+연결 상태 표시등)은 화면에서 숨겨집니다. 눌러도 에러만 나는 버튼을 남겨두지 않기 위해서입니다.
+`RIOT_API_KEY` 가 없을 때 플레이어 정보는 소환사명 검증 없이 형식만 확인하고 저장됩니다.
+
+기능 스위치의 실제 계산은 [`features.js`](features.js) 한 곳에서 이루어지며,
+main 프로세스가 `preload.js` 를 통해 렌더러로 전달합니다.
+
+### 디스코드 봇 서버 (`bot/`)
+
+봇은 데스크톱 앱과 별도로 동작하는 서버입니다. 의존성도 별도로 관리됩니다.
+
+```bash
+cd bot
+npm install
+cp .env.example .env   # DISCORD_TOKEN, CLIENT_ID, API_KEY 입력
+npm run deploy         # 슬래시 명령어 등록 (최초 1회)
 npm start
 ```
 
 
 ### 빌드
 
-프로젝트를 실행 파일로 빌드하려면 아래 명령어를 사용하세요. 빌드 결과물은 `dist` 폴더에 생성됩니다.
-
 ```bash
 npm run build
 ```
+
+`dist/` 에 두 개의 실행 파일이 생성됩니다.
+
+-   `TeamMaker-x.x.x-portable.exe` — 설치 없이 더블클릭으로 실행되는 단일 파일
+-   `TeamMaker-Setup-x.x.x.exe` — NSIS 설치 프로그램
+
+아이콘은 `build/icon.ico` 입니다. 바꾸고 싶으면 같은 경로에 다른 `.ico` 를 넣으면 됩니다.
+(256×256 크기를 반드시 포함해야 합니다.)
+
+**`.env` 는 빌드 산출물에 포함되지 않습니다.** 따라서 설치본/포터블 실행 파일에서는
+디스코드·LCU 연동이 항상 꺼진 상태로 동작합니다. 연동이 필요하면 소스에서 `npm start` 로
+실행하세요.
+
+---
+
+## 📝 변경 내역
+
+최근 수정된 문제와 상세 내용은 [CHANGELOG.md](CHANGELOG.md) 를 참고하세요.
 
 ---
 

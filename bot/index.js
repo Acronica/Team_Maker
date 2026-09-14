@@ -3,7 +3,7 @@ const path = require('node:path');
 const { Client, Collection, Events, GatewayIntentBits, ChannelType } = require('discord.js');
 const express = require('express');
 const cors = require('cors');
-require('dotenv').config();
+require('dotenv').config({ path: path.join(__dirname, '.env') });
 
 const token = process.env.DISCORD_TOKEN;
 const apiKey = process.env.API_KEY;

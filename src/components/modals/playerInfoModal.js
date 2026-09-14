@@ -1,4 +1,5 @@
 import { showNotification } from '../../utils.js';
+import { FEATURES } from '../../config.js';
 
 let userData = {};
 
@@ -63,27 +64,39 @@ export function initPlayerInfoModal() {
         }
 
         addUserBtn.disabled = true;
-        addUserBtn.textContent = '확인 중...';
+        addUserBtn.textContent = FEATURES.riotApi ? '확인 중...' : '저장 중...';
 
-        const verificationResult = await window.electronAPI.invoke('verify-summoner', lolId);
-        if (!verificationResult.success) {
-            showNotification(verificationResult.error, 'error');
-        } else {
-            const verifiedRiotId = verificationResult.data.name;
-            userData[discordName] = { lolId: verifiedRiotId };
-            const saveResult = await window.electronAPI.invoke('save-user-data', userData);
-            if (saveResult.success) {
-                showNotification(`'${discordName}'님의 정보가 저장되었습니다. (Riot ID: ${verifiedRiotId})`);
-                renderSavedUsers();
-                discordNameInput.value = '';
-                lolIdInput.value = '';
-                discordNameInput.focus();
-            } else {
-                showNotification(`저장 실패: ${saveResult.error}`, 'error');
+        const finish = () => {
+            addUserBtn.disabled = false;
+            addUserBtn.textContent = '저장';
+        };
+
+        // Riot API 키가 없으면 검증을 건너뛰고 형식만 확인해 입력한 그대로 저장합니다.
+        let verifiedRiotId = lolId;
+        if (FEATURES.riotApi) {
+            const verificationResult = await window.electronAPI.invoke('verify-summoner', lolId);
+            if (!verificationResult.success) {
+                showNotification(verificationResult.error, 'error');
+                return finish();
             }
+            verifiedRiotId = verificationResult.data.name;
+        } else if (!/^[^#]+#[^#]+$/.test(lolId)) {
+            showNotification('올바른 Riot ID 형식이 아닙니다 (예: 이름#태그).', 'error');
+            return finish();
         }
-        addUserBtn.disabled = false;
-        addUserBtn.textContent = '저장';
+
+        userData[discordName] = { lolId: verifiedRiotId };
+        const saveResult = await window.electronAPI.invoke('save-user-data', userData);
+        if (saveResult.success) {
+            showNotification(`'${discordName}'님의 정보가 저장되었습니다. (Riot ID: ${verifiedRiotId})`);
+            renderSavedUsers();
+            discordNameInput.value = '';
+            lolIdInput.value = '';
+            discordNameInput.focus();
+        } else {
+            showNotification(`저장 실패: ${saveResult.error}`, 'error');
+        }
+        finish();
     };
 
     openBtn?.addEventListener('click', () => {

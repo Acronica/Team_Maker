@@ -6,8 +6,15 @@ const axios = require('axios');
 const log = require('electron-log');
 const { autoUpdater } = require('electron-updater');
 const LCUConnector = require('lcu-connector');
-// .env 파일은 개발 환경에서만 사용됩니다.
-require('dotenv').config();
+// .env 파일은 개발 환경에서만 사용됩니다. (cwd 가 아니라 앱 폴더 기준으로 읽습니다)
+require('dotenv').config({ path: path.join(__dirname, '.env') });
+
+// 기능 스위치. dotenv 가 .env 를 읽은 뒤에 불러와야 합니다.
+const FEATURES = require('./features');
+
+// electron-builder 의 portable 타겟은 실행 시 이 환경 변수를 설정합니다.
+// 포터블 실행 파일은 설치 경로가 없어 업데이트를 덮어쓸 수 없으므로 확인하지 않습니다.
+const isPortable = Boolean(process.env.PORTABLE_EXECUTABLE_DIR);
 
 // =================================================================
 // 자동 업데이트 설정
@@ -15,6 +22,7 @@ require('dotenv').config();
 autoUpdater.logger = log;
 autoUpdater.logger.transports.file.level = 'info';
 log.info('App starting...');
+log.info(`Features: discord=${FEATURES.discord}, lcu=${FEATURES.lcu}, portable=${isPortable}`);
 
 // --- 전역 변수 ---
 let mainWindow;
@@ -54,6 +62,18 @@ function saveSettings(settings) {
 }
 
 
+// Riot API 키는 설정 파일 또는 .env 어느 쪽에 있어도 됩니다.
+const hasRiotApiKey = () => {
+    const settings = getSettings();
+    return Boolean(String(settings.riotApiKey || process.env.RIOT_API_KEY || '').trim());
+};
+
+// preload 가 창 로드 시 동기적으로 읽어가므로 창 생성 전에 등록해 둡니다.
+ipcMain.on('features:get', (event) => {
+    event.returnValue = Object.assign({}, FEATURES, { riotApi: hasRiotApiKey() });
+});
+
+
 // =================================================================
 // 창 생성 및 앱 생명주기
 // =================================================================
@@ -74,7 +94,7 @@ const createMainWindow = () => {
   
   // 창이 로드되면 자동 업데이트 확인 시작
   mainWindow.webContents.on('did-finish-load', () => {
-    if (app.isPackaged) {
+    if (app.isPackaged && !isPortable) {
       autoUpdater.checkForUpdatesAndNotify();
     }
   });
@@ -82,8 +102,12 @@ const createMainWindow = () => {
 
 app.whenReady().then(() => {
     createMainWindow();
-    log.info('LCU Connector: Starting to listen for client...');
-    connector.start();
+    if (FEATURES.lcu) {
+        log.info('LCU Connector: Starting to listen for client...');
+        connector.start();
+    } else {
+        log.info('LCU Connector: disabled (ENABLE_LCU is off).');
+    }
 });
 
 app.on('activate', () => {
@@ -146,6 +170,7 @@ ipcMain.on('start-update', () => autoUpdater.downloadUpdate());
 ipcMain.on('quit-and-install', () => autoUpdater.quitAndInstall(true, true));
 ipcMain.handle('check-for-updates', async () => { 
     if (!app.isPackaged) return { updateInfo: { version: app.getVersion() } };
+    if (isPortable) { log.info('Update check skipped: running as portable.'); return null; }
     try {
         return await autoUpdater.checkForUpdates();
     } catch (error) {
@@ -175,12 +200,14 @@ ipcMain.handle('save-api-key', (event, apiKey) => {
 
 
 // --- 디스코드 봇 관련 IPC ---
-const API_BASE_URL = 'http://34.158.219.243:3000/api';
-const API_KEY = '3810';
-ipcMain.handle('get-server-info', async (event, guildId) => { try { const response = await axios.get(`${API_BASE_URL}/server/${guildId}`, { headers: { 'x-api-key': API_KEY } }); return { success: true, data: response.data }; } catch (error) { return { success: false, error: handleApiError(error, `get-server-info for guild ${guildId}`) }; }});
-ipcMain.handle('get-server-config', async (event, guildId) => { try { const response = await axios.get(`${API_BASE_URL}/servers/${guildId}/config`, { headers: { 'x-api-key': API_KEY } }); return { success: true, data: response.data }; } catch (error) { return { success: false, error: handleApiError(error, `get-server-config for guild ${guildId}`) }; }});
-ipcMain.on('fetch-discord-users', async (event, channelId) => { if (!channelId) return sendToRenderer('users-fetched-error', '채널 ID가 제공되지 않았습니다.'); try { const membersRes = await axios.get(`${API_BASE_URL}/channel-members/${channelId}`, { headers: { 'x-api-key': API_KEY } }); sendToRenderer('users-fetched-success', membersRes.data); } catch (error) { sendToRenderer('users-fetched-error', handleApiError(error, 'fetch-discord-users')); }});
-ipcMain.on('submit-teams-discord', async (event, { guildId, team1, team2 }) => { try { const response = await axios.post(`${API_BASE_URL}/submit-teams`, { guildId, team1, team2 }, { headers: { 'x-api-key': API_KEY } }); sendToRenderer('submit-teams-success', response.data); } catch (error) { sendToRenderer('submit-teams-error', handleApiError(error, 'submit-teams-discord')); }});
+// 서버 주소와 인증 키는 소스에 두지 않고 .env 로 관리합니다.
+const API_BASE_URL = process.env.API_BASE_URL || '';
+const API_KEY = process.env.API_KEY || '';
+const DISCORD_DISABLED = '디스코드 봇 연동이 꺼져 있습니다. (.env 의 ENABLE_DISCORD)';
+ipcMain.handle('get-server-info', async (event, guildId) => { if (!FEATURES.discord) return { success: false, error: DISCORD_DISABLED }; try { const response = await axios.get(`${API_BASE_URL}/server/${guildId}`, { headers: { 'x-api-key': API_KEY } }); return { success: true, data: response.data }; } catch (error) { return { success: false, error: handleApiError(error, `get-server-info for guild ${guildId}`) }; }});
+ipcMain.handle('get-server-config', async (event, guildId) => { if (!FEATURES.discord) return { success: false, error: DISCORD_DISABLED }; try { const response = await axios.get(`${API_BASE_URL}/servers/${guildId}/config`, { headers: { 'x-api-key': API_KEY } }); return { success: true, data: response.data }; } catch (error) { return { success: false, error: handleApiError(error, `get-server-config for guild ${guildId}`) }; }});
+ipcMain.on('fetch-discord-users', async (event, channelId) => { if (!FEATURES.discord) return sendToRenderer('users-fetched-error', DISCORD_DISABLED); if (!channelId) return sendToRenderer('users-fetched-error', '채널 ID가 제공되지 않았습니다.'); try { const membersRes = await axios.get(`${API_BASE_URL}/channel-members/${channelId}`, { headers: { 'x-api-key': API_KEY } }); sendToRenderer('users-fetched-success', membersRes.data); } catch (error) { sendToRenderer('users-fetched-error', handleApiError(error, 'fetch-discord-users')); }});
+ipcMain.on('submit-teams-discord', async (event, { guildId, team1, team2 }) => { if (!FEATURES.discord) return sendToRenderer('submit-teams-error', DISCORD_DISABLED); try { const response = await axios.post(`${API_BASE_URL}/submit-teams`, { guildId, team1, team2 }, { headers: { 'x-api-key': API_KEY } }); sendToRenderer('submit-teams-success', response.data); } catch (error) { sendToRenderer('submit-teams-error', handleApiError(error, 'submit-teams-discord')); }});
 
 // --- 사용자 데이터(플레이어 정보) IPC ---
 const userDataPath = path.join(app.getPath('userData'), 'users.json');
@@ -223,9 +250,10 @@ ipcMain.handle('verify-summoner', async (event, riotId) => {
     }
 });
 
-ipcMain.handle('get-lcu-status', () => isLcuConnected);
+ipcMain.handle('get-lcu-status', () => FEATURES.lcu && isLcuConnected);
 
 ipcMain.on('lcu-invite-to-lobby', async (event, discordNames) => {
+    if (!FEATURES.lcu) return sendToRenderer('lcu-invite-error', '롤 클라이언트 연동이 꺼져 있습니다. (.env 의 ENABLE_LCU)');
     if (!lcuApi) return sendToRenderer('lcu-invite-error', '리그 오브 레전드 클라이언트가 실행 중이 아닙니다.');
     if (discordNames.length === 0) return sendToRenderer('lcu-invite-error', '초대할 플레이어가 없습니다.');
     

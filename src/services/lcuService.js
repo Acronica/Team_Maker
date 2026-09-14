@@ -1,10 +1,14 @@
 import { ipcRenderer } from './ipcService.js';
 import { showNotification } from '../utils.js';
+import { FEATURES } from '../config.js';
 
 /**
  * LCU API 관련 UI 및 이벤트 처리를 초기화합니다.
  */
 export function initializeLcuApi() {
+    // 연동이 꺼져 있으면 이벤트 구독도 상태 조회도 하지 않습니다.
+    if (!FEATURES.lcu) return;
+
     const lcuStatusIndicator = document.getElementById('lcu-status-indicator');
     const lcuInviteBtn = document.getElementById('lcu-invite-btn');
 
@@ -13,6 +17,8 @@ export function initializeLcuApi() {
      * @param {boolean} isConnected - LCU 연결 여부
      */
     const updateLcuStatusUI = (isConnected) => {
+        if (!lcuStatusIndicator) return;
+
         if (isConnected) {
             lcuStatusIndicator.classList.remove('disconnected');
             lcuStatusIndicator.classList.add('connected');

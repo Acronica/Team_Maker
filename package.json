@@ -23,19 +23,40 @@
   "build": {
     "productName": "Team_Maker",
     "appId": "com.example.teammaker",
-    "artifactName": "TeamMaker-Setup-${version}.${ext}",
     "win": {
-      "target": "nsis"
+      "icon": "build/icon.ico",
+      "target": [
+        "nsis",
+        "portable"
+      ]
     },
     "nsis": {
       "oneClick": false,
-      "allowToChangeInstallationDirectory": true
+      "allowToChangeInstallationDirectory": true,
+      "artifactName": "TeamMaker-Setup-${version}.${ext}",
+      "shortcutName": "Team Maker",
+      "createDesktopShortcut": true
     },
     "publish": {
       "provider": "github",
       "owner": "Acronica",
       "repo": "Team_Maker",
       "releaseType": "release"
+    },
+    "directories": {
+      "buildResources": "build",
+      "output": "dist"
+    },
+    "files": [
+      "**/*",
+      "!.env",
+      "!.env.example",
+      "!bot${/*}",
+      "!CHANGELOG.md",
+      "!README.md"
+    ],
+    "portable": {
+      "artifactName": "TeamMaker-${version}-portable.${ext}"
     }
   },
   "dependencies": {
