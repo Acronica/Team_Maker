@@ -30,7 +30,7 @@ window.addEventListener('DOMContentLoaded', async () => {
 
     // 1. 기본 UI 컴포넌트 초기화
     safelyInitialize('Title Bar', initTitleBar);
-    safelyInitialize('Side Panel', initSidePanel); // 사이드 패널 초기화 추가
+    safelyInitialize('Side Panel', initSidePanel);
     safelyInitialize('Roster Panel', initRosterPanel);
     safelyInitialize('Main Grid', initMainGrid);
 
@@ -47,12 +47,8 @@ window.addEventListener('DOMContentLoaded', async () => {
         console.log('✅ Initial data loaded.');
         initializeLcuApi();
         console.log('✅ LCU API service started.');
-        ipcRenderer.invoke('check-for-updates');
-        console.log('✅ Update check requested.');
     } catch (error) {
-        console.error('❌ Failed during initial data loading or service startup:', error);
+        console.error('❌ Failed to load initial data or start LCU service:', error);
     }
-    
-    console.log("🎉 Application initialization complete.");
 });
 

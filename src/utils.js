@@ -44,3 +44,9 @@ export function setSlotText(slot, text) {
     }
 }
 
+export function updateSlotContent(slot, newName) {
+    const front = slot.querySelector('.slot-front');
+    const back = slot.querySelector('.slot-back');
+    if (front) front.textContent = newName || '';
+    if (back) back.textContent = newName || '';
+}

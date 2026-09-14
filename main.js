@@ -6,27 +6,53 @@ const axios = require('axios');
 const log = require('electron-log');
 const { autoUpdater } = require('electron-updater');
 const LCUConnector = require('lcu-connector');
+// .env 파일은 개발 환경에서만 사용됩니다.
 require('dotenv').config();
 
+// =================================================================
+// 자동 업데이트 설정
+// =================================================================
 autoUpdater.logger = log;
 autoUpdater.logger.transports.file.level = 'info';
 log.info('App starting...');
 
-// --- API 및 전역 변수 설정 ---
-const API_BASE_URL = 'http://34.47.92.228:3000/api';
-const API_KEY = '3810';
-const RIOT_API_KEY = process.env.RIOT_API_KEY;
+// --- 전역 변수 ---
 let mainWindow;
 
-// --- LCU 관련 전역 변수 ---
-const lolClientPath = "C:\\Riot Games\\League of Legends";
-const connector = new LCUConnector(lolClientPath);
-let lcuApi;
-let isLcuConnected = false;
+// Renderer 프로세스로 메시지를 보내는 헬퍼 함수
+const sendToRenderer = (channel, ...args) => {
+    log.info(`Sending to renderer [${channel}]:`, args);
+    if (mainWindow) {
+        mainWindow.webContents.send(channel, ...args);
+    }
+};
 
-const lcuAgent = new https.Agent({
-  rejectUnauthorized: false,
-});
+// =================================================================
+// 설정 (API 키 등) 관리
+// =================================================================
+const settingsPath = path.join(app.getPath('userData'), 'settings.json');
+
+function getSettings() {
+    try {
+        if (fs.existsSync(settingsPath)) {
+            return JSON.parse(fs.readFileSync(settingsPath, 'utf-8'));
+        }
+    } catch (error) {
+        log.error('Could not read settings file:', error);
+    }
+    return {}; // 파일이 없거나 오류 발생 시 빈 객체 반환
+}
+
+function saveSettings(settings) {
+    try {
+        fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2));
+        return true;
+    } catch (error) {
+        log.error('Could not save settings file:', error);
+        return false;
+    }
+}
+
 
 // =================================================================
 // 창 생성 및 앱 생명주기
@@ -45,11 +71,18 @@ const createMainWindow = () => {
     },
   });
   mainWindow.loadFile('index.html');
+  
+  // 창이 로드되면 자동 업데이트 확인 시작
+  mainWindow.webContents.on('did-finish-load', () => {
+    if (app.isPackaged) {
+      autoUpdater.checkForUpdatesAndNotify();
+    }
+  });
 };
 
 app.whenReady().then(() => {
     createMainWindow();
-    log.info(`LCU Connector: Starting to listen for client in path "${lolClientPath}".`);
+    log.info('LCU Connector: Starting to listen for client...');
     connector.start();
 });
 
@@ -61,15 +94,20 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
 });
 
-const sendToRenderer = (channel, ...args) => {
-    if (mainWindow) mainWindow.webContents.send(channel, ...args);
-};
 
 // =================================================================
 // LCU 커넥터 이벤트 핸들러
 // =================================================================
+const connector = new LCUConnector();
+let lcuApi;
+let isLcuConnected = false;
+
+const lcuAgent = new https.Agent({
+  rejectUnauthorized: false,
+});
+
 connector.on('connect', (data) => {
-    log.info('League Client connected. Setting up API info.');
+    log.info('League Client connected.');
     isLcuConnected = true;
     const { port, username, password } = data;
     lcuApi = axios.create({
@@ -79,15 +117,16 @@ connector.on('connect', (data) => {
         },
         httpsAgent: lcuAgent
     });
-    sendToRenderer('lcu-connected');
+    sendToRenderer('lcu-connection-changed', true);
 });
 
 connector.on('disconnect', () => {
-    log.info('League Client disconnected. Clearing API info.');
+    log.warn('League Client disconnected.');
     isLcuConnected = false;
     lcuApi = null;
-    sendToRenderer('lcu-disconnected');
+    sendToRenderer('lcu-connection-changed', false);
 });
+
 
 // =================================================================
 // IPC 통신 핸들러
@@ -97,44 +136,65 @@ ipcMain.on('minimize-window', (event) => BrowserWindow.fromWebContents(event.sen
 ipcMain.on('maximize-window', (event) => { const win = BrowserWindow.fromWebContents(event.sender); win.isMaximized() ? win.unmaximize() : win.maximize(); });
 ipcMain.on('close-window', (event) => BrowserWindow.fromWebContents(event.sender).close());
 ipcMain.handle('write-clipboard', (event, text) => clipboard.writeText(text));
-ipcMain.handle('check-for-updates', async () => { if (!app.isPackaged) { return null; } try { const result = await autoUpdater.checkForUpdates(); return result; } catch (error) { sendToRenderer('update-error', error.message); return null; } });
-ipcMain.handle('get-app-version', () => app.getVersion());
-ipcMain.handle('get-patch-notes', async () => { try { delete require.cache[require.resolve('./patch-notes.js')]; const notesModule = require('./patch-notes.js'); return notesModule.html; } catch (error) { return '<p>패치 노트를 불러올 수 없습니다.</p>'; }});
+
+// --- 자동 업데이트 IPC ---
 autoUpdater.on('update-available', (info) => sendToRenderer('update-available', info));
 autoUpdater.on('download-progress', (progressInfo) => sendToRenderer('update-download-progress', progressInfo));
 autoUpdater.on('update-downloaded', (info) => sendToRenderer('update-downloaded', info));
 autoUpdater.on('error', (err) => sendToRenderer('update-error', err ? (err.stack || err).toString() : 'Unknown error'));
 ipcMain.on('start-update', () => autoUpdater.downloadUpdate());
 ipcMain.on('quit-and-install', () => autoUpdater.quitAndInstall(true, true));
+ipcMain.handle('check-for-updates', async () => { 
+    if (!app.isPackaged) return { updateInfo: { version: app.getVersion() } };
+    try {
+        return await autoUpdater.checkForUpdates();
+    } catch (error) {
+        log.error('Could not check for updates:', error);
+        return null;
+    }
+});
+
+// --- 기타 앱 정보 IPC ---
+ipcMain.handle('get-app-version', () => app.getVersion());
+ipcMain.handle('get-patch-notes', async () => { try { delete require.cache[require.resolve('./patch-notes.js')]; const notesModule = require('./patch-notes.js'); return notesModule.html; } catch (error) { return '<p>패치 노트를 불러올 수 없습니다.</p>'; }});
+
+// --- API 키 관리 IPC ---
+ipcMain.handle('get-api-key', () => {
+    const settings = getSettings();
+    // 개발 환경에서는 .env 우선, 없으면 설정 파일 값 사용
+    if (process.env.NODE_ENV !== 'production' && process.env.RIOT_API_KEY) {
+        return process.env.RIOT_API_KEY;
+    }
+    return settings.riotApiKey || '';
+});
+ipcMain.handle('save-api-key', (event, apiKey) => {
+    const settings = getSettings();
+    settings.riotApiKey = apiKey;
+    return saveSettings(settings);
+});
+
+
+// --- 디스코드 봇 관련 IPC ---
+const API_BASE_URL = 'http://34.158.219.243:3000/api';
+const API_KEY = '3810';
 ipcMain.handle('get-server-info', async (event, guildId) => { try { const response = await axios.get(`${API_BASE_URL}/server/${guildId}`, { headers: { 'x-api-key': API_KEY } }); return { success: true, data: response.data }; } catch (error) { return { success: false, error: handleApiError(error, `get-server-info for guild ${guildId}`) }; }});
 ipcMain.handle('get-server-config', async (event, guildId) => { try { const response = await axios.get(`${API_BASE_URL}/servers/${guildId}/config`, { headers: { 'x-api-key': API_KEY } }); return { success: true, data: response.data }; } catch (error) { return { success: false, error: handleApiError(error, `get-server-config for guild ${guildId}`) }; }});
 ipcMain.on('fetch-discord-users', async (event, channelId) => { if (!channelId) return sendToRenderer('users-fetched-error', '채널 ID가 제공되지 않았습니다.'); try { const membersRes = await axios.get(`${API_BASE_URL}/channel-members/${channelId}`, { headers: { 'x-api-key': API_KEY } }); sendToRenderer('users-fetched-success', membersRes.data); } catch (error) { sendToRenderer('users-fetched-error', handleApiError(error, 'fetch-discord-users')); }});
 ipcMain.on('submit-teams-discord', async (event, { guildId, team1, team2 }) => { try { const response = await axios.post(`${API_BASE_URL}/submit-teams`, { guildId, team1, team2 }, { headers: { 'x-api-key': API_KEY } }); sendToRenderer('submit-teams-success', response.data); } catch (error) { sendToRenderer('submit-teams-error', handleApiError(error, 'submit-teams-discord')); }});
 
+// --- 사용자 데이터(플레이어 정보) IPC ---
 const userDataPath = path.join(app.getPath('userData'), 'users.json');
-async function loadUserData() {
-    try {
-        if (!fs.existsSync(userDataPath)) return {};
-        const data = fs.readFileSync(userDataPath, 'utf-8');
-        return JSON.parse(data);
-    } catch (error) {
-        log.error('Failed to load user data:', error);
-        return {};
-    }
-}
+async function loadUserData() { try { if (!fs.existsSync(userDataPath)) return {}; const data = fs.readFileSync(userDataPath, 'utf-8'); return JSON.parse(data); } catch (error) { log.error('Failed to load user data:', error); return {}; }}
 ipcMain.handle('load-user-data', async () => await loadUserData());
-ipcMain.handle('save-user-data', async (event, data) => {
-    try {
-        fs.writeFileSync(userDataPath, JSON.stringify(data, null, 2));
-        return { success: true };
-    } catch (error) {
-        log.error('Failed to save user data:', error);
-        return { success: false, error: error.message };
-    }
-});
+ipcMain.handle('save-user-data', async (event, data) => { try { fs.writeFileSync(userDataPath, JSON.stringify(data, null, 2)); return { success: true }; } catch (error) { log.error('Failed to save user data:', error); return { success: false, error: error.message }; }});
 
+// --- Riot & LCU API 관련 IPC ---
 ipcMain.handle('verify-summoner', async (event, riotId) => {
-    if (!RIOT_API_KEY || RIOT_API_KEY.startsWith('RGAPI-')) {
+    const settings = getSettings();
+    const riotApiKey = settings.riotApiKey || process.env.RIOT_API_KEY;
+
+    if (!riotApiKey || riotApiKey.trim() === '') {
+        log.error('Riot API key is not configured.');
         return { success: false, error: 'Riot API 키가 설정되지 않았습니다.' };
     }
     const parts = riotId.split('#');
@@ -145,14 +205,9 @@ ipcMain.handle('verify-summoner', async (event, riotId) => {
     const tagLine = encodeURIComponent(parts[1]);
     try {
         const accountUrl = `https://asia.api.riotgames.com/riot/account/v1/accounts/by-riot-id/${gameName}/${tagLine}`;
-        log.info(`Requesting Riot Account API: ${accountUrl}`);
-        const accountResponse = await axios.get(accountUrl, {
-            headers: { 'X-Riot-Token': RIOT_API_KEY }
-        });
+        const accountResponse = await axios.get(accountUrl, { headers: { 'X-Riot-Token': riotApiKey } });
         const puuid = accountResponse.data.puuid;
-        await axios.get(`https://kr.api.riotgames.com/lol/summoner/v4/summoners/by-puuid/${puuid}`, {
-             headers: { 'X-Riot-Token': RIOT_API_KEY }
-        });
+        await axios.get(`https://kr.api.riotgames.com/lol/summoner/v4/summoners/by-puuid/${puuid}`, { headers: { 'X-Riot-Token': riotApiKey } });
         const verifiedRiotId = `${accountResponse.data.gameName}#${accountResponse.data.tagLine}`;
         return { success: true, data: { name: verifiedRiotId } };
     } catch (error) {

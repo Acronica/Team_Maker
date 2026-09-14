@@ -1,5 +1,5 @@
 import { POSITIONS, POSITION_COLORS } from '../config.js';
-import { showNotification, setSlotText } from '../utils.js';
+import { showNotification } from '../utils.js';
 import { ipcRenderer } from '../services/ipcService.js';
 import { dragManager } from '../services/dragManager.js';
 import { getCurrentServer } from '../services/settingsService.js';
@@ -9,30 +9,117 @@ let team2Slots = [];
 let allSlots = [];
 
 /**
- * 메인 그리드의 플레이어 슬롯과 헤더를 생성합니다.
+ * [수정됨] 새로운 3D 카드 구조에 맞게 슬롯의 텍스트를 업데이트하는 헬퍼 함수
+ * @param {HTMLElement} slot - .player-slot 요소
+ * @param {string} newName - 새로운 이름
+ */
+function updateSlotContent(slot, newName) {
+    const front = slot.querySelector('.slot-front');
+    const back = slot.querySelector('.slot-back');
+    if (front) front.textContent = newName || '';
+    if (back) back.textContent = newName || '';
+}
+
+/**
+ * 슬롯의 내용을 업데이트하면서 카드 플립 애니메이션을 실행하는 헬퍼 함수.
+ * @param {HTMLElement} slot - .player-slot 요소
+ * @param {string} newName - 슬롯에 새로 들어갈 이름
+ * @param {number} delay - 애니메이션 시작 전 지연 시간 (ms)
+ */
+function animateSlotUpdate(slot, newName, delay = 0) {
+    setTimeout(() => {
+        const inner = slot.querySelector('.slot-inner');
+        // Use a data attribute to prevent re-triggering while animating
+        if (!inner || inner.dataset.isFlipping === 'true') {
+            return;
+        }
+        inner.dataset.isFlipping = 'true';
+
+        // Set the new name on the back of the card
+        const back = slot.querySelector('.slot-back');
+        if (back) {
+            back.textContent = newName || '';
+        }
+
+        // Add the class to trigger the flip animation
+        inner.classList.add('is-flipped');
+
+        // Listen for when the animation ends
+        inner.addEventListener('transitionend', () => {
+            // Now that the card is flipped and showing the back,
+            // update the front content to the new name.
+            updateSlotContent(slot, newName);
+
+            // Turn off the transition effect to instantly reset the card's visual state
+            inner.style.transition = 'none';
+
+            // Remove the class to flip the card back to the front (instantly and invisibly)
+            inner.classList.remove('is-flipped');
+
+            // Force the browser to apply the style changes immediately
+            // A tiny timeout is needed for the browser to catch up
+            setTimeout(() => {
+                // Re-enable the transition effect for future animations
+                inner.style.transition = '';
+                // Allow new animations
+                delete inner.dataset.isFlipping;
+            }, 20); // A small delay is enough
+
+        }, { once: true }); // Ensure the event listener only runs once per flip
+
+    }, delay);
+}
+
+
+/**
+ * 팀 1과 팀 2의 모든 잠기지 않은 플레이어를 스왑하는 함수.
+ * @param {boolean} showSwapNotification - 스왑 후 알림을 표시할지 여부.
+ */
+function swapAllTeams(showSwapNotification = false) {
+    POSITIONS.forEach((pos, i) => {
+        const slot1 = team1Slots[i];
+        const slot2 = team2Slots[i];
+        
+        if (slot1.classList.contains('locked') || slot2.classList.contains('locked')) {
+            return;
+        }
+
+        const tempName1 = slot1.querySelector('.slot-front').textContent;
+        const tempName2 = slot2.querySelector('.slot-front').textContent;
+
+        animateSlotUpdate(slot1, tempName2, i * 50);
+        animateSlotUpdate(slot2, tempName1, i * 50);
+    });
+    
+    if (showSwapNotification) {
+        showNotification('1팀과 2팀의 모든 라인을 스왑했습니다.');
+    }
+}
+
+
+/**
+ * 3D 카드 구조로 슬롯을 생성하도록 변경
  */
 function createGridSlots() {
     const gridSection = document.querySelector('.grid-section');
     if (!gridSection) return;
-    gridSection.innerHTML = ''; // 기존 내용을 초기화합니다.
+    gridSection.innerHTML = '';
 
-    // 팀 타이틀 헤더 생성
-    const headerContainer = document.createElement('div');
-    headerContainer.className = 'grid-header team-title';
-    headerContainer.textContent = '1팀';
+    const team1Title = document.createElement('div');
+    team1Title.className = 'grid-header team-title blue-side';
+    team1Title.textContent = '1팀';
     
     const teamSwapBtn = document.createElement('button');
     teamSwapBtn.id = 'team-swap-button';
     teamSwapBtn.className = 'team-swap-header-btn';
     teamSwapBtn.innerHTML = '↔';
 
-    const headerContainer2 = document.createElement('div');
-    headerContainer2.className = 'grid-header team-title';
-    headerContainer2.textContent = '2팀';
+    const team2Title = document.createElement('div');
+    team2Title.className = 'grid-header team-title red-side';
+    team2Title.textContent = '2팀';
     
-    gridSection.append(document.createElement('div'), headerContainer, teamSwapBtn, headerContainer2);
+    gridSection.append(document.createElement('div'), team1Title, teamSwapBtn, team2Title);
 
-    // 포지션별 슬롯 생성
     team1Slots = [];
     team2Slots = [];
     allSlots = [];
@@ -43,29 +130,51 @@ function createGridSlots() {
         posLabel.textContent = pos;
         posLabel.style.backgroundColor = POSITION_COLORS[pos];
 
-        const team1Slot = document.createElement('div');
-        team1Slot.className = 'player-slot';
+        const createPlayerSlot = () => {
+            const slot = document.createElement('div');
+            slot.className = 'player-slot';
+            slot.innerHTML = `
+                <div class="slot-inner">
+                    <div class="slot-front"></div>
+                    <div class="slot-back"></div>
+                </div>
+            `;
+            return slot;
+        };
+        const team1Slot = createPlayerSlot();
+        const team2Slot = createPlayerSlot();
+        
+        let middleElement;
+        if (pos === '미드') {
+            middleElement = document.createElement('button');
+            middleElement.className = 'coin-flip-btn';
+            middleElement.textContent = 'VS';
+            
+            middleElement.addEventListener('click', () => {
+                if (middleElement.classList.contains('flipping')) return;
+                middleElement.classList.add('flipping');
+                const shouldSwap = Math.random() < 0.5;
+                setTimeout(() => {
+                    if (shouldSwap) {
+                        swapAllTeams(); 
+                        showNotification('변경');
+                    } else {
+                        showNotification('유지');
+                    }
+                }, 500); 
+                middleElement.addEventListener('animationend', () => middleElement.classList.remove('flipping'), { once: true });
+            });
+        } else {
+            middleElement = document.createElement('div'); 
+        }
 
-        const swapButton = document.createElement('button');
-        swapButton.className = 'swap-button';
-        swapButton.innerHTML = '↔';
-
-        const team2Slot = document.createElement('div');
-        team2Slot.className = 'player-slot';
-
-        gridSection.append(posLabel, team1Slot, swapButton, team2Slot);
+        gridSection.append(posLabel, team1Slot, middleElement, team2Slot);
         team1Slots.push(team1Slot);
         team2Slots.push(team2Slot);
 
-        swapButton.addEventListener('click', () => {
-            if (team1Slot.classList.contains('locked') || team2Slot.classList.contains('locked')) return;
-            const tempName1 = team1Slot.textContent;
-            const tempName2 = team2Slot.textContent;
-            setSlotText(team1Slot, tempName2);
-            setSlotText(team2Slot, tempName1);
+        posLabel.addEventListener('click', () => {
+            [posLabel, team1Slot, team2Slot].forEach(el => el.classList.toggle('highlight'));
         });
-
-        posLabel.addEventListener('click', () => [posLabel, team1Slot, swapButton, team2Slot].forEach(el => el.classList.toggle('highlight')));
     });
     
     for (let i = 0; i < POSITIONS.length; i++) {
@@ -79,18 +188,21 @@ function createGridSlots() {
 }
 
 /**
- * 슬롯의 드래그 앤 드롭 기능을 설정합니다.
+ * 3D 카드 구조에 맞게 드래그 앤 드롭 로직 수정
  */
 function setupDragAndDrop() {
     allSlots.forEach(slot => {
         slot.setAttribute('draggable', true);
         
+        const nameProvider = () => slot.querySelector('.slot-front').textContent;
+
         slot.addEventListener('dragstart', (e) => {
-            if (slot.classList.contains('locked') || !slot.textContent) {
+            const name = nameProvider();
+            if (slot.classList.contains('locked') || !name) {
                 e.preventDefault();
                 return;
             }
-            dragManager.start(e, slot.textContent, 'grid');
+            dragManager.start(e, name, 'grid');
         });
 
         slot.addEventListener('dragend', () => dragManager.end());
@@ -104,66 +216,70 @@ function setupDragAndDrop() {
             const from = dragManager.draggedItem;
             if (from.element === targetSlot) return;
 
-            const toName = targetSlot.textContent; 
+            const toName = targetSlot.querySelector('.slot-front').textContent;
 
             if (from.origin === 'grid') {
-                setSlotText(from.element, toName);
-                setSlotText(targetSlot, from.name);
+                updateSlotContent(from.element, toName);
+                updateSlotContent(targetSlot, from.name);
             } else if (from.origin === 'roster') {
-                setSlotText(targetSlot, from.name);
-                setSlotText(from.element, ''); 
+                updateSlotContent(targetSlot, from.name);
+                from.element.textContent = ''; // roster.js의 setSlotText와 호환
                 if (toName) {
                     const addToRosterEvent = new CustomEvent('addToRoster', { detail: { name: toName } });
                     document.dispatchEvent(addToRosterEvent);
                 }
             }
-            
-            targetSlot.classList.add('flash');
-            targetSlot.addEventListener('animationend', () => targetSlot.classList.remove('flash'), { once: true });
         });
     });
 }
 
 /**
- * 슬롯의 클릭 및 더블클릭 상호작용(잠금, 이름 수정)을 설정합니다.
+ * 3D 카드 구조에 맞게 상호작용 로직 수정
  */
 function setupSlotInteractions() {
     allSlots.forEach(slot => {
+        const nameProvider = () => slot.querySelector('.slot-front').textContent;
         let clickTimer = null;
+
         slot.addEventListener('click', () => {
             clickTimer = setTimeout(() => {
-                if (slot.textContent) slot.classList.toggle('locked');
+                if (nameProvider()) slot.classList.toggle('locked');
             }, 200);
         });
 
         slot.addEventListener('dblclick', () => {
             clearTimeout(clickTimer);
-            if (!slot.textContent || slot.classList.contains('locked')) return;
+            const name = nameProvider();
+            if (!name || slot.classList.contains('locked')) return;
 
-            const originalName = slot.textContent;
+            const originalName = name;
             const input = document.createElement('input');
             input.type = 'text';
             input.value = originalName;
+            
+            const front = slot.querySelector('.slot-front');
+            
             Object.assign(input.style, {
                 width: '100%', height: '100%', border: 'none', backgroundColor: 'transparent',
-                color: '#f0e6d2', textAlign: 'center', fontSize: '21px', fontFamily: 'inherit', outline: 'none'
+                color: 'var(--text-color-primary)', textAlign: 'center', fontSize: '21px', 
+                fontFamily: 'inherit', outline: 'none', position: 'absolute', top: 0, left: 0
             });
 
-            slot.textContent = '';
-            slot.appendChild(input);
+            front.innerHTML = '';
+            front.appendChild(input);
             input.focus();
 
             const saveName = () => {
                 const newName = input.value.trim();
-                const allNamesInGrid = allSlots.map(s => s.textContent).filter(Boolean);
+                const allNamesInGrid = allSlots.map(s => s.querySelector('.slot-front').textContent).filter(Boolean);
                 
                 if (newName === '') {
-                    setSlotText(slot, '');
+                    updateSlotContent(slot, '');
                 } else if (allNamesInGrid.includes(newName) && newName !== originalName) {
-                    setSlotText(slot, originalName);
+                    updateSlotContent(slot, originalName);
                     showNotification(`'${newName}'은/는 이미 슬롯에 존재합니다.`, 'error');
                 } else {
-                    setSlotText(slot, newName);
+                    updateSlotContent(slot, newName);
                 }
                 if (input.parentNode) input.remove();
             };
@@ -172,7 +288,7 @@ function setupSlotInteractions() {
             input.addEventListener('keydown', (e) => {
                 if (e.key === 'Enter') input.blur();
                 if (e.key === 'Escape') {
-                    setSlotText(slot, originalName);
+                    updateSlotContent(slot, originalName);
                     if (input.parentNode) input.remove();
                 }
             });
@@ -181,7 +297,7 @@ function setupSlotInteractions() {
 }
 
 /**
- * 이름 추가, 초기화, 랜덤 등 하단 액션 버튼들의 기능을 설정합니다.
+ * 3D 카드 구조에 맞게 액션 버튼 로직 수정
  */
 function setupActionButtons() {
     const nameInput = document.getElementById('name-input');
@@ -190,7 +306,7 @@ function setupActionButtons() {
     const copyButton = document.getElementById('copy-button');
     const submitTeamsBtn = document.getElementById('submit-teams-btn');
     const teamSwapButton = document.getElementById('team-swap-button');
-    const lcuInviteBtn = document.getElementById('lcu-invite-btn'); // 새로 추가된 버튼
+    const lcuInviteBtn = document.getElementById('lcu-invite-btn');
     
     const shuffleMainBtn = document.getElementById('shuffle-main-btn');
     const shuffleDropdownToggleBtn = document.getElementById('shuffle-dropdown-toggle-btn');
@@ -202,17 +318,15 @@ function setupActionButtons() {
     const addName = () => {
         const name = nameInput.value.trim();
         if (!name) return;
-
-        const allNamesInGrid = allSlots.map(s => s.textContent).filter(Boolean);
+        const allNamesInGrid = allSlots.map(s => s.querySelector('.slot-front').textContent).filter(Boolean);
         if (allNamesInGrid.includes(name)) {
             showNotification(`'${name}'은/는 이미 슬롯에 존재합니다.`, 'error');
             nameInput.value = '';
             return;
         }
-
-        const emptySlot = allSlots.find(slot => !slot.textContent);
+        const emptySlot = allSlots.find(slot => !slot.querySelector('.slot-front').textContent);
         if (emptySlot) {
-            setSlotText(emptySlot, name);
+            updateSlotContent(emptySlot, name);
             emptySlot.classList.add('pop-in');
             emptySlot.addEventListener('animationend', () => emptySlot.classList.remove('pop-in'), { once: true });
         } else {
@@ -226,132 +340,67 @@ function setupActionButtons() {
     nameInput?.addEventListener('keydown', e => { if (e.key === 'Enter') addName(); });
     
     resetButton?.addEventListener('click', () => {
-        allSlots.forEach(slot => { setSlotText(slot, ''); slot.classList.remove('locked'); });
+        allSlots.forEach(slot => { updateSlotContent(slot, ''); slot.classList.remove('locked'); });
         showNotification('모든 슬롯이 초기화되었습니다.');
     });
 
-    const shuffleAll = async () => {
-        const unlockedSlots = allSlots.filter(s => !s.classList.contains('locked') && s.textContent);
+    const shuffleAll = () => {
+        const unlockedSlots = allSlots.filter(s => !s.classList.contains('locked') && s.querySelector('.slot-front').textContent);
         if (unlockedSlots.length < 2) return;
 
-        const names = unlockedSlots.map(s => s.textContent);
+        const names = unlockedSlots.map(s => s.querySelector('.slot-front').textContent);
         const finalAssignments = new Map();
         const shuffledNames = [...names].sort(() => Math.random() - 0.5);
         unlockedSlots.forEach((slot, index) => {
             finalAssignments.set(slot, shuffledNames[index]);
         });
-
-        // 애니메이션 시작: 슬롯 숨기기
-        unlockedSlots.forEach(slot => slot.style.opacity = '0');
-        await new Promise(resolve => setTimeout(resolve, 200));
-
-        // 애니메이션 종료: 순차적으로 나타나기
+        
         unlockedSlots.forEach((slot, index) => {
-            setTimeout(() => {
-                setSlotText(slot, finalAssignments.get(slot));
-                slot.style.opacity = '1';
-                slot.classList.add('pop-in');
-                slot.addEventListener('animationend', () => slot.classList.remove('pop-in'), { once: true });
-            }, index * 80);
+            animateSlotUpdate(slot, finalAssignments.get(slot), index * 50);
         });
     };
 
     const shuffleByPosition = () => {
-        let swapped = false;
         POSITIONS.forEach((pos, i) => {
             const slot1 = team1Slots[i];
             const slot2 = team2Slots[i];
-            if (!slot1.classList.contains('locked') && !slot2.classList.contains('locked') && slot1.textContent && slot2.textContent && Math.random() > 0.5) {
-                const temp = slot1.textContent;
-                setSlotText(slot1, slot2.textContent);
-                setSlotText(slot2, temp);
-                swapped = true;
-                [slot1, slot2].forEach(s => {
-                    s.classList.add('flash');
-                    s.addEventListener('animationend', () => s.classList.remove('flash'), { once: true });
-                });
+            if (!slot1.classList.contains('locked') && !slot2.classList.contains('locked') && slot1.querySelector('.slot-front').textContent && slot2.querySelector('.slot-front').textContent && Math.random() > 0.5) {
+                const temp = slot1.querySelector('.slot-front').textContent;
+                animateSlotUpdate(slot1, slot2.querySelector('.slot-front').textContent, i * 50);
+                animateSlotUpdate(slot2, temp, i * 50);
             }
         });
-        if (!swapped) {
-             const availablePairs = POSITIONS.map((p, i) => i).filter(i => {
-                const slot1 = team1Slots[i];
-                const slot2 = team2Slots[i];
-                return !slot1.classList.contains('locked') && !slot2.classList.contains('locked') && slot1.textContent && slot2.textContent;
-            });
-            if (availablePairs.length > 0) {
-                const randomIndex = availablePairs[Math.floor(Math.random() * availablePairs.length)];
-                const slot1 = team1Slots[randomIndex];
-                const slot2 = team2Slots[randomIndex];
-                const temp = slot1.textContent;
-                setSlotText(slot1, slot2.textContent);
-                setSlotText(slot2, temp);
-                [slot1, slot2].forEach(s => {
-                    s.classList.add('flash');
-                    s.addEventListener('animationend', () => s.classList.remove('flash'), { once: true });
-                });
-            }
-        }
     };
     
-    const shuffleTeamPositions = async () => {
-        const shuffleArray = (array) => {
-            for (let i = array.length - 1; i > 0; i--) {
-                const j = Math.floor(Math.random() * (i + 1));
-                [array[i], array[j]] = [array[j], array[i]];
-            }
-            return array;
-        };
+    const shuffleTeamPositions = () => {
+        const shuffleArray = (array) => [...array].sort(() => Math.random() - 0.5);
 
-        const team1UnlockedSlots = team1Slots.filter(s => !s.classList.contains('locked') && s.textContent);
-        const team1Names = team1UnlockedSlots.map(s => s.textContent);
-        const shuffledTeam1Names = shuffleArray([...team1Names]);
+        const team1UnlockedSlots = team1Slots.filter(s => !s.classList.contains('locked') && s.querySelector('.slot-front').textContent);
+        const team1Names = team1UnlockedSlots.map(s => s.querySelector('.slot-front').textContent);
+        const shuffledTeam1Names = shuffleArray(team1Names);
         
-        const team2UnlockedSlots = team2Slots.filter(s => !s.classList.contains('locked') && s.textContent);
-        const team2Names = team2UnlockedSlots.map(s => s.textContent);
-        const shuffledTeam2Names = shuffleArray([...team2Names]);
-
-        const allUnlockedSlots = [...team1UnlockedSlots, ...team2UnlockedSlots];
-        
-        allUnlockedSlots.forEach(slot => slot.style.opacity = '0');
-        await new Promise(resolve => setTimeout(resolve, 200));
+        const team2UnlockedSlots = team2Slots.filter(s => !s.classList.contains('locked') && s.querySelector('.slot-front').textContent);
+        const team2Names = team2UnlockedSlots.map(s => s.querySelector('.slot-front').textContent);
+        const shuffledTeam2Names = shuffleArray(team2Names);
 
         team1UnlockedSlots.forEach((slot, i) => {
-            setTimeout(() => {
-                setSlotText(slot, shuffledTeam1Names[i]);
-                slot.style.opacity = '1';
-                slot.classList.add('pop-in');
-                slot.addEventListener('animationend', () => slot.classList.remove('pop-in'), { once: true });
-            }, i * 80);
+            animateSlotUpdate(slot, shuffledTeam1Names[i], i * 80);
         });
 
         team2UnlockedSlots.forEach((slot, i) => {
-            setTimeout(() => {
-                setSlotText(slot, shuffledTeam2Names[i]);
-                slot.style.opacity = '1';
-                slot.classList.add('pop-in');
-                slot.addEventListener('animationend', () => slot.classList.remove('pop-in'), { once: true });
-            }, i * 80);
+            animateSlotUpdate(slot, shuffledTeam2Names[i], i * 80);
         });
     };
 
     teamSwapButton?.addEventListener('click', () => {
-        POSITIONS.forEach((pos, i) => {
-            const slot1 = team1Slots[i];
-            const slot2 = team2Slots[i];
-            if (!slot1.classList.contains('locked') && !slot2.classList.contains('locked')) {
-                const tempName1 = slot1.textContent;
-                setSlotText(slot1, slot2.textContent);
-                setSlotText(slot2, tempName1);
-            }
-        });
-        showNotification('1팀과 2팀의 모든 라인을 스왑했습니다.');
+        swapAllTeams();
     });
 
     copyButton?.addEventListener('click', async () => {
         let text = "1팀\t2팀\n";
         POSITIONS.forEach((pos, i) => {
-            const p1 = team1Slots[i].textContent || "-";
-            const p2 = team2Slots[i].textContent || "-";
+            const p1 = team1Slots[i].querySelector('.slot-front').textContent || "-";
+            const p2 = team2Slots[i].querySelector('.slot-front').textContent || "-";
             text += `${p1} : ${p2}\n`;
         });
         await ipcRenderer.invoke('write-clipboard', text);
@@ -364,29 +413,21 @@ function setupActionButtons() {
             showNotification('봇 설정을 통해 서버를 먼저 선택해주세요.', 'error'); 
             return; 
         }
-
-        const team1 = team1Slots.map(s => s.textContent).filter(Boolean);
-        const team2 = team2Slots.map(s => s.textContent).filter(Boolean);
-
+        const team1 = team1Slots.map(s => s.querySelector('.slot-front').textContent).filter(Boolean);
+        const team2 = team2Slots.map(s => s.querySelector('.slot-front').textContent).filter(Boolean);
         if (team1.length === 0 && team2.length === 0) {
             showNotification('봇으로 전송할 팀 정보가 없습니다.', 'error');
             return;
         }
-
-        const payload = { 
-            guildId: currentServer.guild.id, 
-            team1, 
-            team2 
-        };
+        const payload = { guildId: currentServer.guild.id, team1, team2 };
         ipcRenderer.send('submit-teams-discord', payload);
         showNotification('팀 정보를 봇으로 전송했습니다.');
     });
 
     lcuInviteBtn?.addEventListener('click', () => {
-        const team1 = team1Slots.map(s => s.textContent).filter(Boolean);
-        const team2 = team2Slots.map(s => s.textContent).filter(Boolean);
+        const team1 = team1Slots.map(s => s.querySelector('.slot-front').textContent).filter(Boolean);
+        const team2 = team2Slots.map(s => s.querySelector('.slot-front').textContent).filter(Boolean);
         const allPlayers = [...team1, ...team2];
-        
         if (allPlayers.length > 0) {
             ipcRenderer.send('lcu-invite-to-lobby', allPlayers);
         } else {
