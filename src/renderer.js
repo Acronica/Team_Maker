@@ -17,6 +17,7 @@ import { applyFeatureToggles } from './services/featureToggles.js';
 import { ipcRenderer } from './services/ipcService.js';
 import { loadInitialData } from './services/settingsService.js';
 import { initializeLcuApi } from './services/lcuService.js';
+import { initResponsiveScale } from './services/responsiveScale.js';
 
 // DOM이 완전히 로드된 후 스크립트를 실행합니다.
 window.addEventListener('DOMContentLoaded', async () => {
@@ -40,6 +41,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     safelyInitialize('Side Panel', initSidePanel);
     safelyInitialize('Roster Panel', initRosterPanel);
     safelyInitialize('Main Grid', initMainGrid);
+    safelyInitialize('Responsive Scale', initResponsiveScale);
 
     // 2. 모든 모달 창 초기화
     safelyInitialize('Bot Settings Modal', initBotSettingsModal);

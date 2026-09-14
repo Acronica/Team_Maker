@@ -94,8 +94,12 @@ body {
 }
 
 .container {
-    width: 100%;
-    max-width: 1100px; 
+    /* 기준 크기입니다. 창 크기에 맞춘 실제 배율은 responsiveScale.js 가 zoom 으로 지정합니다.
+       flex 자식이라 기본값이면 창이 좁을 때 배율 대신 폭이 먼저 줄어들어 기준 크기가
+       흔들리므로 축소를 막습니다. */
+    width: 1100px;
+    max-width: 1100px;
+    flex-shrink: 0;
     margin: 20px;
     display: flex;
     flex-direction: column;
